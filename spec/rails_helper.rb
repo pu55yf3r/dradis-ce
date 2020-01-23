@@ -34,14 +34,21 @@ end
 # If you are not using ActiveRecord, you can remove this line.
 ActiveRecord::Migration.maintain_test_schema!
 
-Capybara.register_driver :chrome do |app|
-  options = %w[headless disable-gpu window-size=1920,1080]
-  Capybara::Selenium::Driver.new app, browser: :chrome,
-    options: Selenium::WebDriver::Chrome::Options.new(args: options)
+Capybara.register_driver :selenium_chrome_headless do |app|
+  # Capybara::Selenium::Driver.load_selenium
+  browser_options = ::Selenium::WebDriver::Chrome::Options.new.tap do |opts|
+    opts.args << '--window-size=1920,1080'
+    opts.args << '--force-device-scale-factor=0.95'
+    opts.args << '--headless'
+    opts.args << '--disable-gpu'
+    opts.args << '--disable-site-isolation-trials'
+    opts.args << '--no-sandbox'
+  end
+  Capybara::Selenium::Driver.new(app, browser: :chrome, options: browser_options)
 end
 
+Capybara.javascript_driver = :selenium_chrome_headless
 Capybara.server = :puma, { Silent: true }
-Capybara.javascript_driver = :chrome
 
 RSpec.configure do |config|
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
