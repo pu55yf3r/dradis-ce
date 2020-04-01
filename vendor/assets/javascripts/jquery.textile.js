@@ -76,10 +76,21 @@
       this.$element.prop('disabled', true);
       this.$element.hide();
 
+      this.$element.on('load-preview', function() {
+        this._loadForm(this.$element.val());
+      }.bind(this));
+
       // add Form
       this.options.$form = $(this.options.tpl.form);
       $('.textile-inner', this.options.$wrap).append(this.options.$form);
-      this._loadForm(this.$element.data('content'));
+      this._loadForm(this.$element.val());
+
+      this.options.$form.on('input textchange', function() {
+        // This should be an a timeout
+        // We update the source view, and then trigger auto-caching
+        this._loadWrite();
+        this.$element.trigger('textchange');
+      }.bind(this));
 
       // add Preview to container and hide
       this.options.$preview = $(this.options.tpl.preview);
