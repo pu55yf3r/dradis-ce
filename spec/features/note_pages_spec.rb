@@ -98,11 +98,20 @@ describe "note pages" do
 
     it_behaves_like "a form with a help button"
 
+    describe 'textile form view' do
+      let(:action_path) { edit_project_node_note_path(current_project, @node, @note) }
+      let(:item) { @note }
+      it_behaves_like 'a textile form view', Note
+    end
+
     # TODO handle the case where a Note has no paperclip versions (legacy data)
 
-    describe "submitting the form with valid information" do
+    describe "submitting the form with valid information", js: true do
       let(:new_content) { 'New note text' }
-      before { fill_in :note_text, with: new_content }
+      before do
+        click_link 'Write'
+        fill_in :note_text, with: new_content
+      end
 
       it "updates the note" do
         submit_form
@@ -151,7 +160,7 @@ describe "note pages" do
 
 
   describe "new page" do
-    let(:content) { "This is an example note" }
+    let(:content) { "#[Title]#\nSample Note" }
     let(:path)    { Rails.root.join("tmp", "templates", "notes", "tmpnote.txt") }
 
     # Create the dummy NoteTemplate:
@@ -222,15 +231,20 @@ describe "note pages" do
       end
     end
 
-    context "when a NoteTemplate is specified" do
+    context "when a NoteTemplate is specified", js: true do
       let(:params)  { { template: "tmpnote" } }
 
       it "pre-populates the textarea with the template contents" do
-        textarea = find("textarea#note_text")
-        expect(textarea.value.strip).to eq content
+        expect(find_field('item_form[field_name_0]').value).to include('Title')
+        expect(find_field('item_form[field_value_0]').value).to include('Sample Note')
       end
+    end
 
-      it "uses the textile-editor plugin"
+    describe "textile form view" do
+      let(:params) { {} }
+
+      let(:action_path) { new_project_node_note_path(current_project, @node) }
+      it_behaves_like 'a textile form view', Note
     end
   end
 end

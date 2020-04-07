@@ -27,8 +27,9 @@
         resize: true,
         // HTML templates
         tpl: {
-          wrap: '<div class="textile-wrap"><ul class="textile-toolbar"></ul><div class="textile-inner row" data-id="textile-inner"></div></div>',
-          preview: '<div class="textile-preview loading-indicator">Loading...</div>',
+          form: '<div class="textile-form h-100"></div>',
+          wrap: '<div class="textile-wrap"><ul class="textile-toolbar"></ul><div class="textile-inner row" data-id="textile-inner"><div class="col-6"></div></div></div>',
+          preview: '<div class="col-6"><div class="textile-preview loading-indicator">Loading...</div></div>',
           help: '<div class="textile-help col-12 loading-indicator">Loading...</div>'
         }
       };
@@ -59,6 +60,7 @@
       this._previousContent = this.$element.val();
       this._previewRendered = false;
       this._helpRendered = false;
+      this._doneTypingInterval = 500;
     },
     _buildContainer: function() {
       // Add wrapper div with toolbar and inner container (see defaults.tpl)
@@ -68,38 +70,97 @@
       this.$element.parent().append( this.options.$wrap );
 
       // move textarea to container
-      $('.textile-inner', this.options.$wrap).append(this.$element);
-      this.$element.addClass('h-100').attr('rows', 20).wrap('<div class="col-6"></div>');
+      $('.col-6', '.textile-inner', this.options.$wrap).append(this.$element);
+      this.$element.hide();
+
+      // add Form
+      this.options.$form = $(this.options.tpl.form);
+      $('.col-6', '.textile-inner', this.options.$wrap).append(this.options.$form);
+      this._loadForm(this.$element.val(), this.$element.data('allow-dropdown'));
 
       // add Preview to container and load
       this.options.$preview = $(this.options.tpl.preview);
       $('.textile-inner', this.options.$wrap).append(this.options.$preview);
-      this.options.$preview.wrap('<div class="col-6"></div>');
-      this._loadPreview();
-
-      // Sync preview
-      var typingTimer;
-      var doneTypingInterval = 500;
-
-      // on keyup, start the countdown
-      this.$element.on('textchange load-preview', function () {
-        clearTimeout(typingTimer);
-        typingTimer = setTimeout(this._onKeyPressPreview.bind(this), doneTypingInterval);
-      }.bind(this));
+      this._loadPreview({ text: this.$element.val() });
 
       // add Help to container and hide
       this.options.$help = $(this.options.tpl.help);
-      $('.textile-inner', this.options.$wrap).append(this.options.$help)
+      $('.textile-inner', this.options.$wrap).append(this.options.$help);
       this.options.$help.hide();
 
       // toolbar
       this._buildToolbar();
+
+      // Event bindings
+      this._bindBehaviors();
+    },
+    _bindBehaviors: function() {
+      // Sync preview
+      // on keyup, start the countdown
+      this.$element.on('textchange load-preview', function() {
+        clearTimeout(this._typingTimer);
+        this._typingTimer = setTimeout(this._onKeyPressPreview.bind(this, 'text'), this._doneTypingInterval);
+      }.bind(this));
+
+      // When auto-save populates data into source view refresh the form
+      this.$element.on('load-preview', function() {
+        this._loadForm(this.$element.val());
+      }.bind(this));
+
+      // Bind all form element actions within container
+      this.bindFieldGroup(this.options.$form);
+    },
+    bindFieldGroup: function($parent) {
+      var that = this;
+
+      // These are cross-browser hacks to keep textareas expanded to content
+      // while users are typing
+      // Handler for setting the correct scrollHeight for current values
+      paddingStr = '0.375rem 0.75rem'
+      $parent.find('[data-expand~=auto]').each(function() {
+        $(this).css({'padding': paddingStr, 'height': this.scrollHeight});
+      });
+
+      // Handler for setting the correct scrollHeight on keyboard input
+      $parent.find('[data-expand~=auto]').on('keyup', function(e) {
+        $(this).css({
+          'padding': paddingStr,
+          'height': '1px'
+        }).css({
+          'padding': paddingStr,
+          'height': this.scrollHeight + 2
+        });
+      });
+
+      $parent.find('[data-behavior~=delete-field]').click(function(){
+        $(this).closest('[data-behavior~=textile-form-field]').remove();
+        that._timedPreview.bind(that)();
+      });
+
+      // Handler for triggering the preview on keyboard input
+      $parent.find('[data-behavior~=preview-enabled]').on('textchange load-preview', this._timedPreview.bind(this));
+    },
+    _timedPreview: function(view) {
+      clearTimeout(this._typingTimer);
+      this._typingTimer = setTimeout(function() {
+        this._onKeyPressPreview.bind(this, view)
+
+        // Piggy back this event for the purpose of updating the source view, which will trigger auto-save
+        // This will be updated/refactored when auto-save is re-worked. Currently it will cause an extra request per edit.
+        this._loadWrite();
+        this.$element.trigger('textchange');
+      }.bind(this), this._doneTypingInterval);
     },
     _buildToolbar: function() {
       var button;
 
+      // Form
+      button = $('<a class="btn-form active" href="javascript:void(null);"><span>Form</span></a>');
+      button.click( $.proxy( function(evt) { this._onBtnForm(evt); }, this));
+      $('.textile-toolbar', this.options.$wrap).append( $('<li>').append(button) );
+
       // Write
-      button = $('<a class="btn-write active" href="javascript:void(null);"><span>Write</span></a>');
+      button = $('<a class="btn-write" href="javascript:void(null);"><span>Write</span></a>');
       button.click( $.proxy( function(evt) { this._onBtnWrite(evt); }, this));
       $('.textile-toolbar', this.options.$wrap).append( $('<li>').append(button) );
 
@@ -118,12 +179,31 @@
       if (this.options.resize === false) return false;
 
     },
+    // Ajax form
+    _loadForm: function(data, allowDropdown) {
+      $.post({
+        url: this.$element.data('form-url') + '.js',
+        data: {source: data, allow_dropdown: allowDropdown},
+        beforeSend: function(){
+          this.options.$form.addClass('loading-indicator').text('Loading...');
+        }.bind(this)
+      });
+    },
+    // Ajax help
+    _loadHelp: function() {
+      var that = this;
+      $.get( this.$element.data('help-url'), function(result){
+        that.options.$help.removeClass('loading-indicator')
+          .html(result);
+        this._helpRendered = true;
+      });
+    },
     // Ajax preview
-    _loadPreview: function() {
+    _loadPreview: function(data) {
       this._previousContent = this.$element.val();
 
       $.post(this.$element.data('preview-url'),
-        { text: this.$element.val() },
+        data,
         function(result) {
           this.options.$preview.removeClass('loading-indicator')
             .html(result);
@@ -131,35 +211,47 @@
         }.bind(this)
       );
     },
-    // Ajax help
-    _loadHelp: function() {
-      $.get( this.$element.data('help-url'), function(result){
-        this.options.$help.removeClass('loading-indicator')
-          .html(result);
-        this._helpRendered = true;
-      }.bind(this));
+    // Ajax write
+    _loadWrite: function() {
+      $.post(
+        this.$element.data('source-url'),
+        { form: this._serializedFormData() },
+        function(result){
+          this.$element.val(result);
+        }.bind(this)
+      );
     },
-    _onKeyPressPreview: function() {
-      // If the text hasn't changed, do nothing.
-      if (this._previousContent == this.$element.val()) {
-        if (!this._previewRendered) {
-          this._loadPreview();
+    _onKeyPressPreview: function(type) {
+      if (type == 'form') {
+        this._loadPreview({ form: this._serializedFormData() });
+      }
+      else if (type == 'text') {
+        // If the text hasn't changed, do nothing.
+        if (this._previousContent == this.$element.val()) {
+          if (!this._previewRendered) {
+            this._loadPreview({ text: this.$element.val() });
+          }
+        } else {
+          this._loadPreview({ text: this.$element.val() });
         }
-      } else {
-        this._loadPreview();
       }
     },
-    // Toolbar button handlers
-    _onBtnWrite: function() {
+    _onBtnForm: function() {
       // Activate toolbar button
       var scope = this.options.$wrap;
       $('.textile-toolbar a', scope).removeClass('active');
-      $('.textile-toolbar .btn-write', scope).addClass('active');
+      $('.textile-toolbar .btn-form', scope).addClass('active');
 
-      // Show Write pane
+      $('.textile-form').empty();
+
+      this._loadForm(this.$element.val(), false);
+
+      // Show Form pane
       this.options.$help.hide();
-      this.$element.show();
       this.options.$preview.show();
+      this.$element.prop('disabled', true);
+      this.$element.hide();
+      this.options.$form.show();
     },
     _onBtnFullScreen: function() {
       $btnFS = $('.btn-fullscreen', this.options.$wrap);
@@ -196,7 +288,7 @@
         $(document.body).css('overflow', 'visible');
 
         this.options.$wrap.removeClass('textile-fullscreen');
-        this.options.$wrap.css('width', this.options.width);
+        this.options.$wrap.css('width', 'auto');
         this.options.tmpspan.after(this.options.$wrap).remove();
 
         this.options.$preview.css('height', '100%');
@@ -213,12 +305,33 @@
 
       // Show Help pane
       this.$element.hide();
+      this.options.$form.hide();
       this.options.$preview.hide();
       this.options.$help.show();
 
       if (!this._helpRendered) {
         this._loadHelp();
       }
+    },
+    // Toolbar button handlers
+    _onBtnWrite: function() {
+      // Activate toolbar button
+      var scope = this.options.$wrap;
+      $('.textile-toolbar a', scope).removeClass('active');
+      $('.textile-toolbar .btn-write', scope).addClass('active');
+
+      // Reload the textarea only when the form has a valid form
+      if (this.options.$form.html() != '') { this._loadWrite(); }
+
+      // Clear out the form
+      this.options.$form.empty();
+
+      // Show Write pane
+      this.options.$form.hide();
+      this.options.$help.hide();
+      this.options.$preview.show();
+      this.$element.prop('disabled', false);
+      this.$element.show();
     },
 
     // --------------------------------------------------- Other event handlers
@@ -233,6 +346,10 @@
       this.options.$wrap.width($(window).width()-20);
       this.options.$preview.height(height-44);
       this.$element.height(height-10);
+    },
+
+    _serializedFormData: function() {
+      return JSON.stringify( $('[name^=item_form]', this.options.$form).serializeArray() );
     }
   };
 
@@ -244,5 +361,5 @@
         $.data(this, 'plugin_' + pluginName, new Plugin( this, options ));
       }
     });
-  }
+  };
 }(jQuery, window));
