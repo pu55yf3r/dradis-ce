@@ -76,7 +76,35 @@
             <% end %> <%# board-list-card cache %>
           <% end %>
         </ul>
-        <%= link_to 'Add a task...', new_project_board_list_card_path(current_project, board, list), class: 'card-new' %>
+
+        <div class="d-flex align-items-center">
+          <%= link_to 'Add a task...', new_project_board_list_card_path(current_project, board, list), class: 'card-new flex-grow-1 d-block' %>
+
+          <% if @note_templates.any? %>
+            <div class="dropdown">
+              <%= link_to 'javascript:void(0)',
+                class: 'dropdown-toggle card-new',
+                data: { toggle: 'dropdown' } do %>
+                <i class="fa fa-chevron-down"></i>
+              <% end %>
+
+              <div class="dropdown-menu dropdown-menu-right">
+                <%= link_to 'Blank',
+                  new_project_board_list_card_path(current_project, board, list),
+                  tabindex: '-1',
+                  class: 'dropdown-item',
+                  title: 'Blank'
+                %>
+
+                <div class="divider"></div>
+
+                <% @note_templates.each do |template| %>
+                  <%= link_to template.name, new_project_board_list_card_path(current_project, board, list, template: template.id), tabindex: '-1', class: 'dropdown-item', title: template.name %>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </div>
       </li>
       <% end %> <%# board-list cache %>
     <% end %>

@@ -17,6 +17,7 @@ class BoardsController < AuthenticatedController
   end
 
   def show
+    @note_templates = NoteTemplate.all
     render layout: !request.xhr?
   end
 
