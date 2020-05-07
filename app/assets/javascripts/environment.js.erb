@@ -1,0 +1,18 @@
+// This uses ERB to inject the application environment at asset compile time.
+// Once loaded we can use window.App.env.development() or another environment
+// type to see which environment we're in if we wanted to conditionalize
+// something like console log statements. Calling window.App.env by itself will
+// produce the environment string as well. window.App.env => 'development'
+
+(function() {
+  this.App || (this.App = {});
+
+  var env = new String('<%= Rails.env %>');
+
+  env.development = function() { return this == 'development' };
+  env.production = function() { return this == 'production' };
+  env.test = function() { return this == 'test' };
+
+  Object.freeze(env);
+  Object.defineProperty(App, 'env', { configurable: false, writable: false, value: env });
+}).call(this);
