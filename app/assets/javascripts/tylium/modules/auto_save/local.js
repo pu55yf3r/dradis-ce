@@ -8,7 +8,7 @@ class LocalAutoSave {
     this.target = target;
 
     // Don't store authenticity_token and utf8
-    this.excludedInputNames = ['utf8', 'authenticity_token', '_method'];
+    this.excludedInputNames = ['utf8', 'authenticity_token', '_method', '_original_updated_at'];
 
     this.init();
   }
@@ -56,7 +56,10 @@ class LocalAutoSave {
     var that = this;
     var data = new FormData(this.target);
     var dataArray = Array.from(data).filter(function(dataElement) {
-      return !that.excludedInputNames.includes(dataElement[0] );
+      for (var item of that.excludedInputNames) {
+        if (dataElement[0].includes(item)) { return false };
+      }
+      return true
     });
 
     return dataArray;
